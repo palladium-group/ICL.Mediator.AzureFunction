@@ -1,9 +1,17 @@
 using System;
+using System.Globalization;
+using System.IO;
 using System.Net.Http;
+using System.Net.Http.Json;
+using System.Text;
 using System.Threading.Tasks;
+using System.Xml;
+using System.Xml.Serialization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Host;
 using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
 
 namespace ICL.Mediator.AzureFunction
 {
@@ -20,6 +28,7 @@ namespace ICL.Mediator.AzureFunction
         [FunctionName("Function1")]
         public async Task Run([ServiceBusTrigger("booking-demo", "bookings-test", Connection = "AzureWebJobsMyServiceBus")]string mySbMsg)
         {
+            //push message to scm-profit
             var requestContent = new StringContent("grant_type=password&username=fitexpress&password=FitExpress@2021");
             var response = await _httpClient.PostAsync("http://fitnewuat.hht.freightintime.com/token", requestContent);
             var responseBody = await response.Content.ReadAsAsync<SCMResponse>();
@@ -28,7 +37,44 @@ namespace ICL.Mediator.AzureFunction
             var bookingRequestContent = new StringContent(mySbMsg);
             var bookingResponse = await _httpClient.PostAsync("http://fitnewuat.hht.freightintime.com/api/v1/Booking/ProcessBooking", bookingRequestContent);
             var responseContent = await bookingResponse.Content.ReadAsStringAsync();
-            _logger.LogInformation($"C# ServiceBus topic trigger function processed message: {mySbMsg}");
+            if (bookingResponse.IsSuccessStatusCode)
+            {
+                XmlSerializer serializer = new XmlSerializer(typeof(ArrayOfTransaction));
+                using (StringReader reader = new StringReader(responseContent))
+                {
+                    var scmResponse = (ArrayOfTransaction)serializer.Deserialize(reader);
+                    var transactionId = scmResponse.Transaction.TransactionId;
+                    var bookingNo = scmResponse.Transaction.CutomerRefNo;
+                    var updateDWHResponse = await _httpClient.GetAsync($"https://localhost:7014/api/PurchaseOrder/{bookingNo}/{transactionId}");
+                    var dwhResponseContent = await updateDWHResponse.Content.ReadAsStringAsync();
+                }
+            }
+        }
+
+        [FunctionName("Function2")]
+        public async Task Run2([ServiceBusTrigger("booking-demo", "booking_warehouse", Connection = "AzureWebJobsMyServiceBus")] string mySbMsg)
+        {
+            //push message to DWH
+            XmlSerializer serializer = new XmlSerializer(typeof(Message));
+            using (StringReader reader = new StringReader(mySbMsg))
+            {
+                var asn = (Message)serializer.Deserialize(reader);
+
+                var BookingNo = asn.Bookings.Booking.BasicDetails.BookingNo;
+                var BookingDate = DateTime.ParseExact(asn.Bookings.Booking.BasicDetails.BookingDate.ToString(), "yyyyMMdd", CultureInfo.InvariantCulture);
+                var purchaseOrder = JsonConvert.SerializeObject(new
+                {
+                    Id = Guid.NewGuid(),
+                    CreateDate = DateTime.Now,
+                    BookingNo,
+                    BookingDate = DateTime.Parse(BookingDate.ToString()),
+                    AsnFile = mySbMsg
+                });
+                var bookingRequestContent = new StringContent(purchaseOrder, Encoding.UTF8, "application/json");
+                _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", null);
+                var dwhResponse = await _httpClient.PostAsync("https://localhost:7014/api/PurchaseOrder", bookingRequestContent);
+                var responseContent = await dwhResponse.Content.ReadAsStringAsync();
+            }
         }
     }
 
