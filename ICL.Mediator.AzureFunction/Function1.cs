@@ -26,7 +26,7 @@ namespace ICL.Mediator.AzureFunction
         }
 
         [FunctionName("Function1")]
-        public async Task Run([ServiceBusTrigger("booking-demo", "bookings-test", Connection = "AzureWebJobsMyServiceBus")]string mySbMsg)
+        public async Task Run([ServiceBusTrigger("asn", "asn-scm-booking", Connection = "AzureWebJobsMyServiceBus")]string mySbMsg)
         {
             //push message to scm-profit
             var requestContent = new StringContent("grant_type=password&username=fitexpress&password=FitExpress@2021");
@@ -52,7 +52,7 @@ namespace ICL.Mediator.AzureFunction
         }
 
         [FunctionName("Function2")]
-        public async Task Run2([ServiceBusTrigger("booking-demo", "booking_warehouse", Connection = "AzureWebJobsMyServiceBus")] string mySbMsg)
+        public async Task Run2([ServiceBusTrigger("asn", "asn-warehouse-booking", Connection = "AzureWebJobsMyServiceBus")] string mySbMsg)
         {
             //push message to DWH
             XmlSerializer serializer = new XmlSerializer(typeof(Message));
@@ -72,7 +72,7 @@ namespace ICL.Mediator.AzureFunction
                 });
                 var bookingRequestContent = new StringContent(purchaseOrder, Encoding.UTF8, "application/json");
                 _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", null);
-                var dwhResponse = await _httpClient.PostAsync("https://localhost:7014/api/PurchaseOrder", bookingRequestContent);
+                var dwhResponse = await _httpClient.PostAsync("https://icl-dwh-backend.azurewebsites.net/api/PurchaseOrder", bookingRequestContent);
                 var responseContent = await dwhResponse.Content.ReadAsStringAsync();
             }
         }
