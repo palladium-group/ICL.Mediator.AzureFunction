@@ -45,7 +45,7 @@ namespace ICL.Mediator.AzureFunction
                     var scmResponse = (ArrayOfTransaction)serializer.Deserialize(reader);
                     var transactionId = scmResponse.Transaction.TransactionId;
                     var bookingNo = scmResponse.Transaction.CutomerRefNo;
-                    var updateDWHResponse = await _httpClient.GetAsync($"https://localhost:7014/api/PurchaseOrder/{bookingNo}/{transactionId}");
+                    var updateDWHResponse = await _httpClient.GetAsync($"https://icl-dwh-backend.azurewebsites.net/api/PurchaseOrder/{bookingNo}/{transactionId}");
                     var dwhResponseContent = await updateDWHResponse.Content.ReadAsStringAsync();
                 }
             }
