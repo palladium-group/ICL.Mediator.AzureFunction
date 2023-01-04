@@ -5,6 +5,7 @@ using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text;
 using System.Threading.Tasks;
+using System.Transactions;
 using System.Xml;
 using System.Xml.Serialization;
 using Microsoft.AspNetCore.Http;
@@ -49,6 +50,19 @@ namespace ICL.Mediator.AzureFunction
                     var dwhResponseContent = await updateDWHResponse.Content.ReadAsStringAsync();
                 }
             }
+            else
+            {
+                // update as failed
+                XmlSerializer serializer = new XmlSerializer(typeof(Message));
+                using (StringReader reader = new StringReader(mySbMsg))
+                {
+                    var asn = (Message)serializer.Deserialize(reader);
+
+                    var BookingNo = asn.Bookings.Booking.BasicDetails.BookingNo;
+                    var updateDWHResponse = await _httpClient.GetAsync($"https://icl-dwh-backend.azurewebsites.net/api/PurchaseOrder/UpdatePurchaseOrderAsFailed/{BookingNo}/{responseContent}");
+                    var dwhResponseContent = await updateDWHResponse.Content.ReadAsStringAsync();
+                }
+            }
         }
 
         [FunctionName("Function2")]
@@ -68,7 +82,8 @@ namespace ICL.Mediator.AzureFunction
                     CreateDate = DateTime.Now,
                     BookingNo,
                     BookingDate = DateTime.Parse(BookingDate.ToString()),
-                    AsnFile = mySbMsg
+                    AsnFile = mySbMsg,
+                    Status = 0
                 });
                 var bookingRequestContent = new StringContent(purchaseOrder, Encoding.UTF8, "application/json");
                 _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", null);
