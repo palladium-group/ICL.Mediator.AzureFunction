@@ -53,7 +53,7 @@ namespace ICL.Mediator.AzureFunction
                             var asn = (Message)xmlserializer.Deserialize(xmlreader);
                             var BookingNo = asn.Bookings.Booking.BasicDetails.BookingNo;
                             var errorString = JsonConvert.SerializeObject(responseContent);
-                            var res = await _httpClient.GetAsync($"https://localhost:7014/api/PurchaseOrder/UpdatePurchaseOrderAsFailed/{BookingNo}");
+                            var res = await _httpClient.GetAsync($"https://icl-dwh-backend.azurewebsites.net/api/PurchaseOrder/UpdatePurchaseOrderAsFailed/{BookingNo}");
                         }
                     }
                     else
