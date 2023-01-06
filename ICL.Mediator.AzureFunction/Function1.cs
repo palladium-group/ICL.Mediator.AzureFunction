@@ -52,13 +52,17 @@ namespace ICL.Mediator.AzureFunction
                         {
                             var asn = (Message)xmlserializer.Deserialize(xmlreader);
                             var BookingNo = asn.Bookings.Booking.BasicDetails.BookingNo;
-                            await _httpClient.GetAsync($"https://icl-dwh-backend.azurewebsites.net/api/PurchaseOrder/UpdatePurchaseOrderAsFailed/{BookingNo}/{responseContent}");
+                            var errorString = JsonConvert.SerializeObject(responseContent);
+                            var res = await _httpClient.GetAsync($"https://localhost:7014/api/PurchaseOrder/UpdatePurchaseOrderAsFailed/{BookingNo}");
                         }
                     }
-                    var transactionId = scmResponse.Transaction.TransactionId;
-                    var bookingNo = scmResponse.Transaction.CutomerRefNo;
-                    var updateDWHResponse = await _httpClient.GetAsync($"https://icl-dwh-backend.azurewebsites.net/api/PurchaseOrder/{bookingNo}/{transactionId}");
-                    var dwhResponseContent = await updateDWHResponse.Content.ReadAsStringAsync();
+                    else
+                    {
+                        var transactionId = scmResponse.Transaction.TransactionId;
+                        var bookingNo = scmResponse.Transaction.CutomerRefNo;
+                        var updateDWHResponse = await _httpClient.GetAsync($"https://icl-dwh-backend.azurewebsites.net/api/PurchaseOrder/{bookingNo}/{transactionId}");
+                        var dwhResponseContent = await updateDWHResponse.Content.ReadAsStringAsync();
+                    }
                 }
             }
         }
