@@ -44,22 +44,20 @@ namespace ICL.Mediator.AzureFunction
                 using (StringReader reader = new StringReader(responseContent))
                 {
                     var scmResponse = (ArrayOfTransaction)serializer.Deserialize(reader);
+                    if (scmResponse.Transaction.Status == "Fail")
+                    {
+                        // update as failed
+                        XmlSerializer xmlserializer = new XmlSerializer(typeof(Message));
+                        using (StringReader xmlreader = new StringReader(mySbMsg))
+                        {
+                            var asn = (Message)xmlserializer.Deserialize(xmlreader);
+                            var BookingNo = asn.Bookings.Booking.BasicDetails.BookingNo;
+                            await _httpClient.GetAsync($"https://icl-dwh-backend.azurewebsites.net/api/PurchaseOrder/UpdatePurchaseOrderAsFailed/{BookingNo}/{responseContent}");
+                        }
+                    }
                     var transactionId = scmResponse.Transaction.TransactionId;
                     var bookingNo = scmResponse.Transaction.CutomerRefNo;
                     var updateDWHResponse = await _httpClient.GetAsync($"https://icl-dwh-backend.azurewebsites.net/api/PurchaseOrder/{bookingNo}/{transactionId}");
-                    var dwhResponseContent = await updateDWHResponse.Content.ReadAsStringAsync();
-                }
-            }
-            else
-            {
-                // update as failed
-                XmlSerializer serializer = new XmlSerializer(typeof(Message));
-                using (StringReader reader = new StringReader(mySbMsg))
-                {
-                    var asn = (Message)serializer.Deserialize(reader);
-
-                    var BookingNo = asn.Bookings.Booking.BasicDetails.BookingNo;
-                    var updateDWHResponse = await _httpClient.GetAsync($"https://icl-dwh-backend.azurewebsites.net/api/PurchaseOrder/UpdatePurchaseOrderAsFailed/{BookingNo}/{responseContent}");
                     var dwhResponseContent = await updateDWHResponse.Content.ReadAsStringAsync();
                 }
             }
