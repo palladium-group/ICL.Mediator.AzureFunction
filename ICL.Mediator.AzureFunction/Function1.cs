@@ -64,7 +64,6 @@ namespace ICL.Mediator.AzureFunction
                         var bookingNo = scmResponse.Transaction.CutomerRefNo;
                         mwresponse.BookingNo = scmResponse.Transaction.CutomerRefNo;
                         mwresponse.SCMID = scmResponse.Transaction.TransactionId;
-                        mwresponse.ErrorString = JsonConvert.SerializeObject(responseContent);
                         mwresponse.DeliveryStatus = "Delivered";
                     }
 
