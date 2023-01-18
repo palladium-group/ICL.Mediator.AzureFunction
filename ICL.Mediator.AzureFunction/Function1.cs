@@ -43,6 +43,7 @@ namespace ICL.Mediator.AzureFunction
                 XmlSerializer serializer = new XmlSerializer(typeof(ArrayOfTransaction));
                 using (StringReader reader = new StringReader(responseContent))
                 {
+                    MiddlewareResponse mwresponse = new MiddlewareResponse();
                     var scmResponse = (ArrayOfTransaction)serializer.Deserialize(reader);
                     if (scmResponse.Transaction.Status == "Fail")
                     {
@@ -51,18 +52,27 @@ namespace ICL.Mediator.AzureFunction
                         using (StringReader xmlreader = new StringReader(mySbMsg))
                         {
                             var asn = (Message)xmlserializer.Deserialize(xmlreader);
-                            var BookingNo = asn.Bookings.Booking.BasicDetails.BookingNo;
-                            var errorString = JsonConvert.SerializeObject(responseContent);
-                            var res = await _httpClient.GetAsync($"https://icl-dwh-backend.azurewebsites.net/api/PurchaseOrder/UpdatePurchaseOrderAsFailed/{BookingNo}");
+                            mwresponse.BookingNo = asn.Bookings.Booking.BasicDetails.BookingNo;
+                            mwresponse.SCMID = "";
+                            mwresponse.ErrorString = JsonConvert.SerializeObject(responseContent);
+                            mwresponse.DeliveryStatus = "Failed";
                         }
                     }
                     else
                     {
                         var transactionId = scmResponse.Transaction.TransactionId;
                         var bookingNo = scmResponse.Transaction.CutomerRefNo;
-                        var updateDWHResponse = await _httpClient.GetAsync($"https://icl-dwh-backend.azurewebsites.net/api/PurchaseOrder/{bookingNo}/{transactionId}");
-                        var dwhResponseContent = await updateDWHResponse.Content.ReadAsStringAsync();
+                        mwresponse.BookingNo = scmResponse.Transaction.CutomerRefNo;
+                        mwresponse.SCMID = scmResponse.Transaction.TransactionId;
+                        mwresponse.ErrorString = JsonConvert.SerializeObject(responseContent);
+                        mwresponse.DeliveryStatus = "Delivered";
                     }
+
+                    var respnsedata = JsonConvert.SerializeObject(mwresponse);
+                    var content = new StringContent(respnsedata, Encoding.UTF8, "application/json");
+                    _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", null);
+                    var res = await _httpClient.PostAsync($"https://icl-dwh-backend.azurewebsites.net/api/PurchaseOrder/UpdatePurchaseOrderStatus", content);
+                    var dwhResponseContent = await res.Content.ReadAsStringAsync();
                 }
             }
         }
