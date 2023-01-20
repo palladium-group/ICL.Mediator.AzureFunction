@@ -54,17 +54,14 @@ namespace ICL.Mediator.AzureFunction
                             var asn = (Message)xmlserializer.Deserialize(xmlreader);
                             mwresponse.BookingNo = asn.Bookings.Booking.BasicDetails.BookingNo;
                             mwresponse.SCMID = "";
-                            mwresponse.ErrorString = JsonConvert.SerializeObject(responseContent);
+                            mwresponse.ErrorString = scmResponse.Transaction.Errors.Error.Description;
                             mwresponse.DeliveryStatus = "Failed";
                         }
                     }
                     else
                     {
-                        var transactionId = scmResponse.Transaction.TransactionId;
-                        var bookingNo = scmResponse.Transaction.CutomerRefNo;
                         mwresponse.BookingNo = scmResponse.Transaction.CutomerRefNo;
-                        mwresponse.SCMID = scmResponse.Transaction.TransactionId;
-                        mwresponse.ErrorString = JsonConvert.SerializeObject(responseContent);
+                        mwresponse.SCMID = scmResponse.Transaction.ID;
                         mwresponse.DeliveryStatus = "Delivered";
                     }
 
