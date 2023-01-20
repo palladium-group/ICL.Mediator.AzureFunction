@@ -59,11 +59,28 @@ namespace ICL.Mediator.AzureFunction
                     if (dyn.ArrayOfTransaction.Transaction.Status == "Fail")
                     {
                         var errorMessage = string.Empty;
-                        foreach (var error in dyn.ArrayOfTransaction.Transaction.Errors.Error)
+                        if (((IDictionary<String, object>)dyn.ArrayOfTransaction.Transaction.Errors).ContainsKey("Error"))
                         {
-                            errorMessage += ", " + error.Description;
+                            foreach (var error in dyn.ArrayOfTransaction.Transaction.Errors.Error)
+                            {
+                                //Type baseType = error.GetGenericTypeDefinition();
+                                if (!(error is KeyValuePair<string, object>) && ((IDictionary<String, object>)error).ContainsKey("Description"))
+                                {
+                                    errorMessage += ", " + error.Description;
+                                }
+                                else
+                                {
+                                    if (((KeyValuePair<String, object>)error).Key == "Description")
+                                    {
+                                        errorMessage += ", " + ((KeyValuePair<String, object>)error).Value;
+                                    }
+                                }
+                            }
                         }
-                        mwresponse.BookingNo = asndyn.Message.Bookings.Booking.BasicDetails.BookingNo;
+                        if (((IDictionary<String, object>)asndyn.Message.Bookings.Booking.BasicDetails).ContainsKey("BookingNo"))
+                        {
+                            mwresponse.BookingNo = asndyn.Message.Bookings.Booking.BasicDetails.BookingNo;
+                        }
                         //mwresponse.SCMID = "";
                         mwresponse.ErrorString = errorMessage;
                         mwresponse.DeliveryStatus = "Failed";
