@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Dynamic;
 using System.Globalization;
 using System.IO;
@@ -58,7 +59,7 @@ namespace ICL.Mediator.AzureFunction
                         var errorMessage = string.Empty;
                         foreach (var error in dyn.ArrayOfTransaction.Transaction.Errors.Error)
                         {
-                            errorMessage += " " + error.Description;
+                            errorMessage += ", " + error.Description;
                         }
                         mwresponse.BookingNo = asndyn.Message.Bookings.Booking.BasicDetails.BookingNo;
                         //mwresponse.SCMID = "";
@@ -67,8 +68,14 @@ namespace ICL.Mediator.AzureFunction
                     }
                     else
                     {
-                        mwresponse.BookingNo = dyn.ArrayOfTransaction.Transaction.CutomerRefNo;
-                        mwresponse.SCMID = dyn.ArrayOfTransaction.Transaction.ID;
+                        if (((IDictionary<String, object>)dyn.ArrayOfTransaction.Transaction).ContainsKey("CutomerRefNo"))
+                        {
+                            mwresponse.BookingNo = dyn.ArrayOfTransaction.Transaction.CutomerRefNo;
+                        }
+                        if (((IDictionary<String, object>)dyn.ArrayOfTransaction.Transaction).ContainsKey("TransactionId"))
+                        {
+                            mwresponse.SCMID = dyn.ArrayOfTransaction.Transaction.TransactionId;
+                        }
                         mwresponse.DeliveryStatus = "Delivered";
                     }
 
