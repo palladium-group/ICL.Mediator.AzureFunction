@@ -75,7 +75,7 @@ namespace ICL.Mediator.AzureFunction
                     var respnsedata = JsonConvert.SerializeObject(mwresponse);
                     var content = new StringContent(respnsedata, Encoding.UTF8, "application/json");
                     _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", null);
-                    var res = await _httpClient.PostAsync($"https://localhost:7014/api/PurchaseOrder/UpdatePurchaseOrderStatus", content);
+                    var res = await _httpClient.PostAsync($"https://icl-dwh-backend.azurewebsites.net/api/PurchaseOrder/UpdatePurchaseOrderStatus", content);
                     var dwhResponseContent = await res.Content.ReadAsStringAsync();
 
                     //XmlSerializer serializer = new XmlSerializer(typeof(ArrayOfTransaction));
