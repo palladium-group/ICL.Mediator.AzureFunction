@@ -1,4 +1,5 @@
 using System;
+using System.Dynamic;
 using System.Globalization;
 using System.IO;
 using System.Net.Http;
@@ -7,6 +8,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Transactions;
 using System.Xml;
+using System.Xml.Linq;
 using System.Xml.Serialization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Azure.WebJobs;
@@ -29,39 +31,44 @@ namespace ICL.Mediator.AzureFunction
         [FunctionName("Function1")]
         public async Task Run([ServiceBusTrigger("asn", "asn-scm-booking", Connection = "AzureWebJobsMyServiceBus")]string mySbMsg)
         {
-            //push message to scm-profit
-            var requestContent = new StringContent("grant_type=password&username=fitexpress&password=FitExpress@2021");
-            var response = await _httpClient.PostAsync("http://fitnewuat.hht.freightintime.com/token", requestContent);
-            var responseBody = await response.Content.ReadAsAsync<SCMResponse>();
-            var token = responseBody.access_token;
-            _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
-            var bookingRequestContent = new StringContent(mySbMsg);
-            var bookingResponse = await _httpClient.PostAsync("http://fitnewuat.hht.freightintime.com/api/v1/Booking/ProcessBooking", bookingRequestContent);
-            var responseContent = await bookingResponse.Content.ReadAsStringAsync();
-            if (bookingResponse.IsSuccessStatusCode)
+            try
             {
-                XmlSerializer serializer = new XmlSerializer(typeof(ArrayOfTransaction));
-                using (StringReader reader = new StringReader(responseContent))
+                //push message to scm-profit
+                var requestContent = new StringContent("grant_type=password&username=fitexpress&password=FitExpress@2021");
+                var response = await _httpClient.PostAsync("http://fitnewuat.hht.freightintime.com/token", requestContent);
+                var responseBody = await response.Content.ReadAsAsync<SCMResponse>();
+                var token = responseBody.access_token;
+                _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+                var bookingRequestContent = new StringContent(mySbMsg);
+                var bookingResponse = await _httpClient.PostAsync("http://fitnewuat.hht.freightintime.com/api/v1/Booking/ProcessBooking", bookingRequestContent);
+                var responseContent = await bookingResponse.Content.ReadAsStringAsync();
+                if (bookingResponse.IsSuccessStatusCode)
                 {
+
+                    XDocument doc = XDocument.Parse(responseContent.ToString());
+                    XDocument asnDoc = XDocument.Parse(mySbMsg.ToString());
+                    string jsonText = JsonConvert.SerializeXNode(doc);
+                    string asnJSONText = JsonConvert.SerializeXNode(asnDoc);
+                    dynamic dyn = JsonConvert.DeserializeObject<ExpandoObject>(jsonText);
+                    dynamic asndyn = JsonConvert.DeserializeObject<ExpandoObject>(asnJSONText);
+
                     MiddlewareResponse mwresponse = new MiddlewareResponse();
-                    var scmResponse = (ArrayOfTransaction)serializer.Deserialize(reader);
-                    if (scmResponse.Transaction.Status == "Fail")
+                    if (dyn.ArrayOfTransaction.Transaction.Status == "Fail")
                     {
-                        // update as failed
-                        XmlSerializer xmlserializer = new XmlSerializer(typeof(Message));
-                        using (StringReader xmlreader = new StringReader(mySbMsg))
+                        var errorMessage = string.Empty;
+                        foreach (var error in dyn.ArrayOfTransaction.Transaction.Errors.Error)
                         {
-                            var asn = (Message)xmlserializer.Deserialize(xmlreader);
-                            mwresponse.BookingNo = asn.Bookings.Booking.BasicDetails.BookingNo;
-                            mwresponse.SCMID = "";
-                            mwresponse.ErrorString = scmResponse.Transaction.Errors.Error.Description;
-                            mwresponse.DeliveryStatus = "Failed";
+                            errorMessage += " " + error.Description;
                         }
+                        mwresponse.BookingNo = asndyn.Message.Bookings.Booking.BasicDetails.BookingNo;
+                        //mwresponse.SCMID = "";
+                        mwresponse.ErrorString = errorMessage;
+                        mwresponse.DeliveryStatus = "Failed";
                     }
                     else
                     {
-                        mwresponse.BookingNo = scmResponse.Transaction.CutomerRefNo;
-                        mwresponse.SCMID = scmResponse.Transaction.ID;
+                        mwresponse.BookingNo = dyn.ArrayOfTransaction.Transaction.CutomerRefNo;
+                        mwresponse.SCMID = dyn.ArrayOfTransaction.Transaction.ID;
                         mwresponse.DeliveryStatus = "Delivered";
                     }
 
@@ -70,8 +77,42 @@ namespace ICL.Mediator.AzureFunction
                     _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", null);
                     var res = await _httpClient.PostAsync($"https://icl-dwh-backend.azurewebsites.net/api/PurchaseOrder/UpdatePurchaseOrderStatus", content);
                     var dwhResponseContent = await res.Content.ReadAsStringAsync();
+
+                    //XmlSerializer serializer = new XmlSerializer(typeof(ArrayOfTransaction));
+                    //using (StringReader reader = new StringReader(responseContent))
+                    //{
+                    //    MiddlewareResponse mwresponse = new MiddlewareResponse();
+                    //    var scmResponse = (ArrayOfTransaction)serializer.Deserialize(reader);
+                    //    if (scmResponse.Transaction.Status == "Fail")
+                    //    {
+                    //        // update as failed
+                    //        XmlSerializer xmlserializer = new XmlSerializer(typeof(Message));
+                    //        using (StringReader xmlreader = new StringReader(mySbMsg))
+                    //        {
+                    //            var asn = (Message)xmlserializer.Deserialize(xmlreader);
+                    //            mwresponse.BookingNo = asn.Bookings.Booking.BasicDetails.BookingNo;
+                    //            mwresponse.SCMID = "";
+                    //            mwresponse.ErrorString = scmResponse.Transaction.Errors.Error.Description;
+                    //            mwresponse.DeliveryStatus = "Failed";
+                    //        }
+                    //    }
+                    //    else
+                    //    {
+                    //        mwresponse.BookingNo = scmResponse.Transaction.CutomerRefNo;
+                    //        mwresponse.SCMID = scmResponse.Transaction.ID;
+                    //        mwresponse.DeliveryStatus = "Delivered";
+                    //    }
+
+
+                    //}
                 }
             }
+            catch (Exception)
+            {
+
+                throw;
+            }
+            
         }
 
         [FunctionName("Function2")]
