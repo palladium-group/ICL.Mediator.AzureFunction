@@ -14,6 +14,7 @@ using System.Xml.Serialization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Host;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 
@@ -23,10 +24,12 @@ namespace ICL.Mediator.AzureFunction
     {
         private readonly ILogger<Function1> _logger;
         private static readonly HttpClient _httpClient = new HttpClient();
+        private readonly IMemoryCache _memoryCache;
 
-        public Function1(ILogger<Function1> log)
+        public Function1(ILogger<Function1> log, IMemoryCache memoryCache)
         {
             _logger = log;
+            _memoryCache = memoryCache;
         }
 
         [FunctionName("Function1")]
@@ -35,14 +38,31 @@ namespace ICL.Mediator.AzureFunction
             try
             {
                 log.LogInformation("Started at " + DateTime.Now);
+                string fitNewTokenUrl = Environment.GetEnvironmentVariable("FitNewTokenUrl");
+                string processBookingUrl = Environment.GetEnvironmentVariable("ProcessBookingUrl");
+                string dwhUrl = Environment.GetEnvironmentVariable("DWHUrl");
+                // check if the token is already stored and not expired
+                // Check if access token is already cached and not expired
+                var accessToken = _memoryCache.Get<string>("AccessToken");
+                var tokenExpirationTime = _memoryCache.Get<DateTime>("TokenExpirationTime");
+                if (accessToken == null || tokenExpirationTime == null || DateTime.UtcNow >= tokenExpirationTime)
+                {
+                    // Request new access token
+                    var requestContent = new StringContent("grant_type=password&username=fitexpress&password=FitExpress@2021");
+                    var response = await _httpClient.PostAsync(fitNewTokenUrl, requestContent);
+                    var responseBody = await response.Content.ReadAsAsync<SCMResponse>();
+                    accessToken = responseBody.access_token;
+
+                    // Cache access token and expiration time
+                    var expiresIn = TimeSpan.FromSeconds(responseBody.expires_in);
+                    tokenExpirationTime = DateTime.UtcNow.Add(expiresIn);
+                    _memoryCache.Set("AccessToken", accessToken, expiresIn);
+                    _memoryCache.Set("TokenExpirationTime", tokenExpirationTime, expiresIn);
+                }
                 //push message to scm-profit
-                var requestContent = new StringContent("grant_type=password&username=fitexpress&password=FitExpress@2021");
-                var response = await _httpClient.PostAsync("http://fitnewuat.hht.freightintime.com/token", requestContent);
-                var responseBody = await response.Content.ReadAsAsync<SCMResponse>();
-                var token = responseBody.access_token;
-                _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+                _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
                 var bookingRequestContent = new StringContent(mySbMsg);
-                var bookingResponse = await _httpClient.PostAsync("http://fitnewuat.hht.freightintime.com/api/v1/Booking/ProcessBooking", bookingRequestContent);
+                var bookingResponse = await _httpClient.PostAsync(processBookingUrl, bookingRequestContent);
                 var responseContent = await bookingResponse.Content.ReadAsStringAsync();
                 if (bookingResponse.IsSuccessStatusCode)
                 {
@@ -101,7 +121,7 @@ namespace ICL.Mediator.AzureFunction
                     var respnsedata = JsonConvert.SerializeObject(mwresponse);
                     var content = new StringContent(respnsedata, Encoding.UTF8, "application/json");
                     _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", null);
-                    var res = await _httpClient.PostAsync($"https://icl-dwh-backend.azurewebsites.net/api/PurchaseOrder/UpdatePurchaseOrderStatus", content);
+                    var res = await _httpClient.PostAsync($"{dwhUrl}/api/PurchaseOrder/UpdatePurchaseOrderStatus", content);
                     var dwhResponseContent = await res.Content.ReadAsStringAsync();
                     log.LogInformation("DEH.Backend response at " + DateTime.Now);
                 }
@@ -116,6 +136,7 @@ namespace ICL.Mediator.AzureFunction
         [FunctionName("Function2")]
         public async Task Run2([ServiceBusTrigger("asn", "asn-warehouse-booking", Connection = "AzureWebJobsMyServiceBus")] string mySbMsg)
         {
+            string dwhUrl = Environment.GetEnvironmentVariable("DWHUrl");
             //push message to DWH
             XmlSerializer serializer = new XmlSerializer(typeof(Message));
             using (StringReader reader = new StringReader(mySbMsg))
@@ -135,7 +156,7 @@ namespace ICL.Mediator.AzureFunction
                 });
                 var bookingRequestContent = new StringContent(purchaseOrder, Encoding.UTF8, "application/json");
                 _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", null);
-                var dwhResponse = await _httpClient.PostAsync("https://icl-dwh-backend.azurewebsites.net/api/PurchaseOrder", bookingRequestContent);
+                var dwhResponse = await _httpClient.PostAsync($"{dwhUrl}/api/PurchaseOrder", bookingRequestContent);
                 var responseContent = await dwhResponse.Content.ReadAsStringAsync();
             }
         }
@@ -145,5 +166,6 @@ namespace ICL.Mediator.AzureFunction
     {
         public string access_token { get; set; }
         public string token_type { get; set; }
+        public int expires_in { get; set; }
     }
 }
